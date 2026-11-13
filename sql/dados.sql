@@ -8,13 +8,14 @@
 -- e assim o filtro por cidade funciona com "evora" ou "Evora".
 
 -- -----------------------------------------------------
--- UTILIZADORES (ficam com id 1, 2, 3, 4)
+-- UTILIZADORES (ficam com id 1 a 5)
 -- -----------------------------------------------------
 INSERT INTO utilizador (nome, email, matricula, tipo_ficha) VALUES
     ('Guilherme Pinto',  'guilherme.pinto@mail.pt',  'AA-12-BB', 'CCS'),      -- id 1
     ('Guilherme Santos', 'guilherme.santos@mail.pt', '12-CD-34', 'TIPO2'),    -- id 2
     ('Pedro Santos',     'pedro.santos@mail.pt',     '56-EF-78', 'CHADEMO'),  -- id 3
-    ('Ana Ferreira',     'ana.ferreira@mail.pt',     'BC-90-DE', 'CCS');      -- id 4
+    ('Ana Ferreira',     'ana.ferreira@mail.pt',     'BC-90-DE', 'CCS'),      -- id 4
+    ('Joana Costa',      'joana.costa@mail.pt',      'DE-45-FG', 'CCS');      -- id 5
 
 -- -----------------------------------------------------
 -- POSTOS (ficam com id 1 a 7)
