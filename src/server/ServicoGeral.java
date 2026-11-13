@@ -272,16 +272,7 @@ public class ServicoGeral {
         // ---------- 1. Validar as datas (nao precisa da BD) ----------
         LocalDateTime inicio = lerData(textoInicio);
         LocalDateTime fim    = lerData(textoFim);
-
-        if (!fim.isAfter(inicio)) {
-            throw new ErroValidacao("A data de fim tem de ser depois da data de inicio.");
-        }
-        if (inicio.isBefore(LocalDateTime.now())) {
-            throw new ErroValidacao("Nao e possivel reservar um periodo que ja comecou ou ja passou.");
-        }
-        if (Duration.between(inicio, fim).toMinutes() > MAX_HORAS * 60) {
-            throw new ErroValidacao("Uma reserva nao pode durar mais de " + MAX_HORAS + " horas.");
-        }
+        validarPeriodo(inicio, fim);
 
         Connection con = null;
         try {
@@ -396,6 +387,221 @@ public class ServicoGeral {
                 con.close();
             }
         }
+    }
+
+    // =====================================================
+    // FUNCIONALIDADE PROPRIA 1: CANCELAR RESERVA
+    // So o dono pode cancelar, e so antes de a reserva comecar.
+    // =====================================================
+    public void cancelarReserva(int reservaId, int utilizadorId) throws ErroValidacao, SQLException {
+
+        Connection con = null;
+        try {
+            con = bd.ligar();
+            con.setAutoCommit(false);   // inicio da TRANSACAO
+
+            // 1. Ler a reserva
+            PreparedStatement psRes = con.prepareStatement(
+                    "SELECT * FROM reserva WHERE id = ?");
+            psRes.setInt(1, reservaId);
+            ResultSet rsRes = psRes.executeQuery();
+            if (!rsRes.next()) {
+                throw new ErroValidacao("A reserva #" + reservaId + " nao existe.");
+            }
+            int postoId = rsRes.getInt("posto_id");
+
+            // 2. Bloquear o posto (mesmo mecanismo do criarReserva)
+            PreparedStatement psPosto = con.prepareStatement(
+                    "SELECT * FROM posto WHERE id = ? FOR UPDATE");
+            psPosto.setInt(1, postoId);
+            ResultSet rsPosto = psPosto.executeQuery();
+            rsPosto.next();
+            Posto posto = lerPosto(rsPosto);
+
+            // 3. Validacoes
+            if (rsRes.getInt("utilizador_id") != utilizadorId) {
+                throw new ErroValidacao("A reserva #" + reservaId + " nao pertence ao utilizador #"
+                                        + utilizadorId + ".");
+            }
+            if (!rsRes.getString("estado").equals(EstadoReserva.ATIVA.name())) {
+                throw new ErroValidacao("A reserva #" + reservaId + " nao esta ativa (esta "
+                                        + rsRes.getString("estado") + ").");
+            }
+            LocalDateTime inicio = rsRes.getTimestamp("data_inicio").toLocalDateTime();
+            if (inicio.isBefore(LocalDateTime.now())) {
+                throw new ErroValidacao("A reserva #" + reservaId + " ja comecou e nao pode ser cancelada.");
+            }
+
+            // 4. Cancelar
+            PreparedStatement psCancelar = con.prepareStatement(
+                    "UPDATE reserva SET estado = 'CANCELADA' WHERE id = ?");
+            psCancelar.setInt(1, reservaId);
+            psCancelar.executeUpdate();
+
+            // 5. Se o posto ficou sem reservas ativas, volta a DISPONIVEL
+            EstadoPosto estadoAntes = posto.getEstado();
+            EstadoPosto estadoDepois = estadoAntes;
+
+            if (contarReservasAtivas(con, postoId) == 0
+                    && estadoAntes.sistemaPodeMudarPara(EstadoPosto.DISPONIVEL)) {
+                PreparedStatement psEstado = con.prepareStatement(
+                        "UPDATE posto SET estado = 'DISPONIVEL' WHERE id = ?");
+                psEstado.setInt(1, postoId);
+                psEstado.executeUpdate();
+                estadoDepois = EstadoPosto.DISPONIVEL;
+            }
+
+            // 6. Historico
+            Historico.registar(con, postoId, reservaId, "RESERVA_CANCELADA",
+                    estadoAntes.name(), estadoDepois.name(),
+                    "Reserva #" + reservaId + " cancelada pelo utilizador #" + utilizadorId);
+
+            con.commit();
+
+        } catch (ErroValidacao | SQLException e) {
+            if (con != null) {
+                con.rollback();
+            }
+            throw e;
+
+        } finally {
+            if (con != null) {
+                con.close();
+            }
+        }
+    }
+
+    // =====================================================
+    // FUNCIONALIDADE PROPRIA 2: AS MINHAS RESERVAS (com custo estimado)
+    // custo = horas x potencia (kW) x preco (EUR/kWh)
+    // =====================================================
+    public List<Reserva> minhasReservas(int utilizadorId) throws ErroValidacao, SQLException {
+
+        // JOIN com a tabela posto para ir buscar o codigo, a potencia e o preco
+        String sql = "SELECT r.*, p.codigo, p.potencia_kw, p.preco_kwh "
+                   + "FROM reserva r JOIN posto p ON r.posto_id = p.id "
+                   + "WHERE r.utilizador_id = ? "
+                   + "ORDER BY r.data_inicio DESC";
+
+        List<Reserva> reservas = new ArrayList<>();
+
+        try (Connection con = bd.ligar();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            // Confirmar que o utilizador existe
+            PreparedStatement psUtil = con.prepareStatement("SELECT id FROM utilizador WHERE id = ?");
+            psUtil.setInt(1, utilizadorId);
+            if (!psUtil.executeQuery().next()) {
+                throw new ErroValidacao("O utilizador #" + utilizadorId + " nao existe.");
+            }
+
+            ps.setInt(1, utilizadorId);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                Reserva r = lerReserva(rs);
+
+                double horas = Duration.between(r.getDataInicio(), r.getDataFim()).toMinutes() / 60.0;
+                double custo = horas * rs.getDouble("potencia_kw") * rs.getDouble("preco_kwh");
+
+                r.setCodigoPosto(rs.getString("codigo"));
+                r.setCustoEstimado(custo);
+                reservas.add(r);
+            }
+        }
+        return reservas;
+    }
+
+    // =====================================================
+    // FUNCIONALIDADE PROPRIA 3: PROCURAR POSTOS LIVRES num periodo,
+    // compativeis com a ficha do carro do utilizador.
+    // =====================================================
+    public List<Posto> procurarPostosLivres(int utilizadorId, String textoInicio, String textoFim)
+            throws ErroValidacao, SQLException {
+
+        LocalDateTime inicio = lerData(textoInicio);
+        LocalDateTime fim    = lerData(textoFim);
+        validarPeriodo(inicio, fim);
+
+        // Postos aprovados, que aceitam reservas, com a ficha certa,
+        // e que NAO tem nenhuma reserva ativa a cruzar-se com o periodo pedido.
+        String sql = "SELECT * FROM posto p "
+                   + "WHERE p.estado_admin = 'APROVADO' "
+                   + "AND p.estado IN ('DISPONIVEL', 'RESERVADO') "
+                   + "AND p.tipo_ficha = ? "
+                   + "AND NOT EXISTS ("
+                   + "    SELECT 1 FROM reserva r "
+                   + "    WHERE r.posto_id = p.id AND r.estado = 'ATIVA' "
+                   + "    AND r.data_inicio < ? AND r.data_fim > ?"
+                   + ") "
+                   + "ORDER BY p.cidade, p.codigo";
+
+        List<Posto> postos = new ArrayList<>();
+
+        try (Connection con = bd.ligar()) {
+
+            // Ficha do carro do utilizador
+            PreparedStatement psUtil = con.prepareStatement("SELECT tipo_ficha FROM utilizador WHERE id = ?");
+            psUtil.setInt(1, utilizadorId);
+            ResultSet rsUtil = psUtil.executeQuery();
+            if (!rsUtil.next()) {
+                throw new ErroValidacao("O utilizador #" + utilizadorId + " nao existe.");
+            }
+            String ficha = rsUtil.getString("tipo_ficha");
+
+            PreparedStatement ps = con.prepareStatement(sql);
+            ps.setString(1, ficha);
+            ps.setTimestamp(2, Timestamp.valueOf(fim));
+            ps.setTimestamp(3, Timestamp.valueOf(inicio));
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                postos.add(lerPosto(rs));
+            }
+        }
+        return postos;
+    }
+
+    // =====================================================
+    // AUXILIAR: valida um periodo de reserva (usado por criarReserva e procurarPostosLivres)
+    // =====================================================
+    private void validarPeriodo(LocalDateTime inicio, LocalDateTime fim) throws ErroValidacao {
+        if (!fim.isAfter(inicio)) {
+            throw new ErroValidacao("A data de fim tem de ser depois da data de inicio.");
+        }
+        if (inicio.isBefore(LocalDateTime.now())) {
+            throw new ErroValidacao("Nao e possivel reservar um periodo que ja comecou ou ja passou.");
+        }
+        if (Duration.between(inicio, fim).toMinutes() > MAX_HORAS * 60) {
+            throw new ErroValidacao("Uma reserva nao pode durar mais de " + MAX_HORAS + " horas.");
+        }
+    }
+
+    // =====================================================
+    // AUXILIAR: quantas reservas ATIVAS (ainda nao terminadas) tem um posto
+    // =====================================================
+    private int contarReservasAtivas(Connection con, int postoId) throws SQLException {
+        PreparedStatement ps = con.prepareStatement(
+                "SELECT COUNT(*) FROM reserva "
+              + "WHERE posto_id = ? AND estado = 'ATIVA' AND data_fim > NOW()");
+        ps.setInt(1, postoId);
+        ResultSet rs = ps.executeQuery();
+        rs.next();
+        return rs.getInt(1);
+    }
+
+    // =====================================================
+    // AUXILIAR: converte a linha atual do ResultSet num objeto Reserva
+    // =====================================================
+    public static Reserva lerReserva(ResultSet rs) throws SQLException {
+        return new Reserva(
+                rs.getInt("id"),
+                rs.getInt("utilizador_id"),
+                rs.getInt("posto_id"),
+                rs.getTimestamp("data_inicio").toLocalDateTime(),
+                rs.getTimestamp("data_fim").toLocalDateTime(),
+                EstadoReserva.valueOf(rs.getString("estado")),
+                rs.getTimestamp("criada_em").toLocalDateTime());
     }
 
     // =====================================================

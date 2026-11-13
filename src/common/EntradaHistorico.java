@@ -2,6 +2,7 @@ package common;
 
 import java.io.Serializable;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 
 /** Uma linha do historico de um posto (tabela historico). */
 public class EntradaHistorico implements Serializable {
@@ -42,6 +43,7 @@ public class EntradaHistorico implements Serializable {
     @Override
     public String toString() {
         String mudanca = (estadoAnterior == null ? "-" : estadoAnterior) + " -> " + estadoNovo;
-        return String.format("%s | %-18s | %-27s | %s", dataHora, tipo, mudanca, descricao);
+        String data = dataHora.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm"));
+        return String.format("%s | %-18s | %-27s | %s", data, tipo, mudanca, descricao);
     }
 }
