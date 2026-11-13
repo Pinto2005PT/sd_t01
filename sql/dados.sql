@@ -3,8 +3,9 @@
 -- Correr DEPOIS do schema.sql (tabelas vazias, ids comecam em 1)
 -- =====================================================
 
--- Para os acentos funcionarem no Windows
-SET client_encoding = 'UTF8';
+-- Nota: os dados nao tem acentos de proposito.
+-- A consola do Windows (cmd) tem problemas com acentos ao escrever/ler,
+-- e assim o filtro por cidade funciona com "evora" ou "Evora".
 
 -- -----------------------------------------------------
 -- UTILIZADORES (ficam com id 1, 2, 3, 4)
@@ -19,11 +20,11 @@ INSERT INTO utilizador (nome, email, matricula, tipo_ficha) VALUES
 -- POSTOS (ficam com id 1 a 7)
 -- -----------------------------------------------------
 INSERT INTO posto (codigo, localizacao, cidade, potencia_kw, tipo_ficha, preco_kwh, estado, estado_admin) VALUES
-    ('EVR-001', 'Parque do Rossio',          'Évora',  50,  'CCS',     0.35, 'RESERVADO',     'APROVADO'),  -- id 1
-    ('EVR-002', 'Praça do Giraldo',          'Évora',  22,  'TIPO2',   0.25, 'DISPONIVEL',    'APROVADO'),  -- id 2
-    ('EVR-003', 'Colégio do Espírito Santo', 'Évora',  150, 'CCS',     0.45, 'DISPONIVEL',    'APROVADO'),  -- id 3
-    ('EVR-004', 'Évora Plaza',               'Évora',  50,  'CHADEMO', 0.38, 'EM_MANUTENCAO', 'APROVADO'),  -- id 4
-    ('LSB-001', 'Parque das Nações',         'Lisboa', 150, 'CCS',     0.49, 'DISPONIVEL',    'APROVADO'),  -- id 5
+    ('EVR-001', 'Parque do Rossio',          'Evora',  50,  'CCS',     0.35, 'RESERVADO',     'APROVADO'),  -- id 1
+    ('EVR-002', 'Praca do Giraldo',          'Evora',  22,  'TIPO2',   0.25, 'DISPONIVEL',    'APROVADO'),  -- id 2
+    ('EVR-003', 'Colegio do Espirito Santo', 'Evora',  150, 'CCS',     0.45, 'DISPONIVEL',    'APROVADO'),  -- id 3
+    ('EVR-004', 'Evora Plaza',               'Evora',  50,  'CHADEMO', 0.38, 'EM_MANUTENCAO', 'APROVADO'),  -- id 4
+    ('LSB-001', 'Parque das Nacoes',         'Lisboa', 150, 'CCS',     0.49, 'DISPONIVEL',    'APROVADO'),  -- id 5
     ('LSB-002', 'Avenida da Liberdade',      'Lisboa', 22,  'TIPO2',   0.29, 'DISPONIVEL',    'PENDENTE'),  -- id 6
     ('BJA-001', 'Centro de Beja',            'Beja',   50,  'CCS',     0.36, 'DISPONIVEL',    'PENDENTE');  -- id 7
 
@@ -63,10 +64,10 @@ INSERT INTO historico (posto_id, reserva_id, tipo, estado_anterior, estado_novo,
 
     -- posto 2: reserva #3 do Guilherme Santos (criada e depois concluida)
     (2, 3, 'RESERVA_CRIADA',    'DISPONIVEL', 'RESERVADO',  'Reserva #3 criada',    CURRENT_DATE - 3 + TIME '18:00'),
-    (2, 3, 'RESERVA_CONCLUIDA', 'RESERVADO',  'DISPONIVEL', 'Reserva #3 concluída', CURRENT_DATE - 2 + TIME '11:00'),
+    (2, 3, 'RESERVA_CONCLUIDA', 'RESERVADO',  'DISPONIVEL', 'Reserva #3 concluida', CURRENT_DATE - 2 + TIME '11:00'),
 
     -- posto 4: foi para manutencao (ontem)
-    (4, NULL, 'ESTADO_ALTERADO', 'DISPONIVEL', 'EM_MANUTENCAO', 'Manutenção preventiva', CURRENT_DATE - 1 + TIME '08:00'),
+    (4, NULL, 'ESTADO_ALTERADO', 'DISPONIVEL', 'EM_MANUTENCAO', 'Manutencao preventiva', CURRENT_DATE - 1 + TIME '08:00'),
 
     -- posto 1: reservas #1 e #2 (hoje de manha)
     (1, 1, 'RESERVA_CRIADA', 'DISPONIVEL', 'RESERVADO', 'Reserva #1 criada', CURRENT_DATE + TIME '08:00'),

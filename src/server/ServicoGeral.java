@@ -7,10 +7,14 @@ import common.Posto;
 import common.TipoFicha;
 import common.Utilizador;
 
+import common.EntradaHistorico;
+
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Logica do servidor para as funcionalidades do CLIENTE GERAL.
@@ -152,5 +156,112 @@ public class ServicoGeral {
                 con.close();
             }
         }
+    }
+
+    // =====================================================
+    // LISTAGEM COM FILTROS (so postos APROVADOS)
+    // Filtros: cidade, tipo de ficha e potencia minima.
+    // Um filtro vazio/null significa "qualquer valor".
+    // =====================================================
+    public List<Posto> listarPostos(String cidade, TipoFicha tipoFicha, double potenciaMinima)
+            throws SQLException {
+
+        // Truque simples: se o filtro estiver vazio usamos '%', que no LIKE quer dizer "qualquer coisa".
+        String filtroCidade = (cidade == null || cidade.trim().isEmpty()) ? "%" : cidade.trim();
+        String filtroFicha  = (tipoFicha == null) ? "%" : tipoFicha.name();
+
+        String sql = "SELECT * FROM posto "
+                   + "WHERE estado_admin = 'APROVADO' "
+                   + "AND cidade ILIKE ? "          // ILIKE = LIKE sem ligar a maiusculas/minusculas
+                   + "AND tipo_ficha LIKE ? "
+                   + "AND potencia_kw >= ? "
+                   + "ORDER BY cidade, codigo";
+
+        List<Posto> postos = new ArrayList<>();
+
+        try (Connection con = bd.ligar();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setString(1, filtroCidade);
+            ps.setString(2, filtroFicha);
+            ps.setDouble(3, potenciaMinima);
+
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                postos.add(lerPosto(rs));
+            }
+        }
+        return postos;
+    }
+
+    // =====================================================
+    // CONSULTA DE ESTADO ATUAL (operacional + administrativo)
+    // Devolve o Posto, que tem os dois estados.
+    // =====================================================
+    public Posto consultarEstado(int postoId) throws ErroValidacao, SQLException {
+
+        String sql = "SELECT * FROM posto WHERE id = ?";
+
+        try (Connection con = bd.ligar();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, postoId);
+            ResultSet rs = ps.executeQuery();
+
+            if (!rs.next()) {
+                throw new ErroValidacao("O posto #" + postoId + " nao existe.");
+            }
+            return lerPosto(rs);
+        }
+    }
+
+    // =====================================================
+    // CONSULTA DE HISTORICO de um posto (do mais antigo para o mais recente)
+    // =====================================================
+    public List<EntradaHistorico> consultarHistorico(int postoId) throws ErroValidacao, SQLException {
+
+        // Primeiro confirma que o posto existe (senao lanca ErroValidacao)
+        consultarEstado(postoId);
+
+        String sql = "SELECT * FROM historico WHERE posto_id = ? ORDER BY data_hora, id";
+
+        List<EntradaHistorico> historico = new ArrayList<>();
+
+        try (Connection con = bd.ligar();
+             PreparedStatement ps = con.prepareStatement(sql)) {
+
+            ps.setInt(1, postoId);
+            ResultSet rs = ps.executeQuery();
+
+            while (rs.next()) {
+                historico.add(new EntradaHistorico(
+                        rs.getInt("id"),
+                        rs.getInt("posto_id"),
+                        (Integer) rs.getObject("reserva_id"),   // pode vir null
+                        rs.getString("tipo"),
+                        rs.getString("estado_anterior"),
+                        rs.getString("estado_novo"),
+                        rs.getString("descricao"),
+                        rs.getTimestamp("data_hora").toLocalDateTime()));
+            }
+        }
+        return historico;
+    }
+
+    // =====================================================
+    // AUXILIAR: converte a linha atual do ResultSet num objeto Posto.
+    // (static para o ServicoAdmin tambem poder usar: ServicoGeral.lerPosto(rs))
+    // =====================================================
+    public static Posto lerPosto(ResultSet rs) throws SQLException {
+        return new Posto(
+                rs.getInt("id"),
+                rs.getString("codigo"),
+                rs.getString("localizacao"),
+                rs.getString("cidade"),
+                rs.getDouble("potencia_kw"),
+                TipoFicha.valueOf(rs.getString("tipo_ficha")),
+                rs.getDouble("preco_kwh"),
+                EstadoPosto.valueOf(rs.getString("estado")),
+                EstadoAdmin.valueOf(rs.getString("estado_admin")));
     }
 }
