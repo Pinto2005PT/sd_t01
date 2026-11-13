@@ -4,16 +4,16 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/** Uma linha do historico de um posto (tabela historico). */
+// Uma linha do historico de um posto (tabela historico).
 public class EntradaHistorico implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
     private int id;
     private int postoId;
-    private Integer reservaId;      // Integer (e nao int) porque pode ser null
+    private Integer reservaId;      // Integer porque pode ser null
     private String tipo;            // REGISTO, APROVACAO, RESERVA_CRIADA, ...
-    private String estadoAnterior;  // pode ser null
+    private String estadoAnterior;
     private String estadoNovo;
     private String descricao;
     private LocalDateTime dataHora;

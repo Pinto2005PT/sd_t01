@@ -23,20 +23,17 @@ import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 
-/**
- * Logica do servidor para as funcionalidades do CLIENTE GERAL.
- * Valida os pedidos e le/escreve na base de dados.
- */
+// Logica do servidor para o cliente geral
 public class ServicoGeral {
 
-    // Codigo de erro do PostgreSQL quando se viola um UNIQUE (valor repetido)
+    // erro do PostgreSQL quando um valor UNIQUE ja existe
     private static final String ERRO_REPETIDO = "23505";
 
-    // Regras de negocio da reserva
+    // regras da reserva
     private static final int MAX_RESERVAS_ATIVAS = 2;
     private static final int MAX_HORAS = 2;
 
-    // Formato das datas que o cliente envia, ex.: "2026-11-20 14:00"
+    // formato das datas, ex: 2026-11-20 14:00
     private static final DateTimeFormatter FORMATO_DATA = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
 
     private final BaseDados bd;
@@ -45,13 +42,10 @@ public class ServicoGeral {
         this.bd = bd;
     }
 
-    // =====================================================
-    // REGISTO DE UTILIZADOR
-    // =====================================================
+    // registo de utilizador
     public Utilizador registarUtilizador(String nome, String email, String matricula, TipoFicha tipoFicha)
             throws ErroValidacao, SQLException {
 
-        // 1. Validar os dados
         if (nome == null || nome.trim().isEmpty()) {
             throw new ErroValidacao("O nome e obrigatorio.");
         }
@@ -65,7 +59,7 @@ public class ServicoGeral {
             throw new ErroValidacao("O tipo de ficha e obrigatorio.");
         }
 
-        // 2. Inserir na BD. O "RETURNING id" devolve o id gerado pelo SERIAL.
+        // RETURNING id devolve o id gerado pela BD
         String sql = "INSERT INTO utilizador (nome, email, matricula, tipo_ficha) "
                    + "VALUES (?, ?, ?, ?) RETURNING id";
 
@@ -91,34 +85,13 @@ public class ServicoGeral {
         }
     }
 
-    // =====================================================
-    // REGISTO DE POSTO (fica PENDENTE ate o admin aprovar)
-    // =====================================================
+    // registo de posto (fica PENDENTE ate o admin aprovar)
     public Posto registarPosto(String codigo, String localizacao, String cidade,
                                double potenciaKw, TipoFicha tipoFicha, double precoKwh)
             throws ErroValidacao, SQLException {
 
-        // 1. Validar os dados
-        if (codigo == null || codigo.trim().isEmpty()) {
-            throw new ErroValidacao("O codigo e obrigatorio.");
-        }
-        if (localizacao == null || localizacao.trim().isEmpty()) {
-            throw new ErroValidacao("A localizacao e obrigatoria.");
-        }
-        if (cidade == null || cidade.trim().isEmpty()) {
-            throw new ErroValidacao("A cidade e obrigatoria.");
-        }
-        if (potenciaKw <= 0) {
-            throw new ErroValidacao("A potencia tem de ser maior que 0.");
-        }
-        if (tipoFicha == null) {
-            throw new ErroValidacao("O tipo de ficha e obrigatorio.");
-        }
-        if (precoKwh < 0) {
-            throw new ErroValidacao("O preco nao pode ser negativo.");
-        }
+        validarDadosPosto(codigo, localizacao, cidade, potenciaKw, tipoFicha, precoKwh);
 
-        // O posto novo comeca sempre DISPONIVEL e PENDENTE
         Posto posto = new Posto(codigo.trim(), localizacao.trim(), cidade.trim(),
                                 potenciaKw, tipoFicha, precoKwh);
 
@@ -129,8 +102,7 @@ public class ServicoGeral {
         try {
             con = bd.ligar();
 
-            // 2. TRANSACAO: inserir o posto + escrever no historico.
-            //    Ou ficam as duas coisas gravadas, ou nenhuma.
+            // transacao: posto + historico (ou grava os dois ou nenhum)
             con.setAutoCommit(false);
 
             PreparedStatement ps = con.prepareStatement(sql);
@@ -150,7 +122,7 @@ public class ServicoGeral {
             Historico.registar(con, id, null, "REGISTO", null, EstadoAdmin.PENDENTE.name(),
                                "Posto registado");
 
-            con.commit();   // grava tudo
+            con.commit();
 
             return new Posto(id, posto.getCodigo(), posto.getLocalizacao(), posto.getCidade(),
                              posto.getPotenciaKw(), posto.getTipoFicha(), posto.getPrecoKwh(),
@@ -158,7 +130,7 @@ public class ServicoGeral {
 
         } catch (SQLException e) {
             if (con != null) {
-                con.rollback();   // desfaz tudo o que foi feito nesta transacao
+                con.rollback();
             }
             if (ERRO_REPETIDO.equals(e.getSQLState())) {
                 throw new ErroValidacao("Ja existe um posto com o codigo " + codigo + ".");
@@ -172,21 +144,17 @@ public class ServicoGeral {
         }
     }
 
-    // =====================================================
-    // LISTAGEM COM FILTROS (so postos APROVADOS)
-    // Filtros: cidade, tipo de ficha e potencia minima.
-    // Um filtro vazio/null significa "qualquer valor".
-    // =====================================================
+    // listagem dos postos aprovados com filtros (cidade, ficha, potencia minima)
     public List<Posto> listarPostos(String cidade, TipoFicha tipoFicha, double potenciaMinima)
             throws SQLException {
 
-        // Truque simples: se o filtro estiver vazio usamos '%', que no LIKE quer dizer "qualquer coisa".
+        // filtro vazio -> '%' (no LIKE quer dizer qualquer coisa)
         String filtroCidade = (cidade == null || cidade.trim().isEmpty()) ? "%" : cidade.trim();
         String filtroFicha  = (tipoFicha == null) ? "%" : tipoFicha.name();
 
         String sql = "SELECT * FROM posto "
                    + "WHERE estado_admin = 'APROVADO' "
-                   + "AND cidade ILIKE ? "          // ILIKE = LIKE sem ligar a maiusculas/minusculas
+                   + "AND cidade ILIKE ? "
                    + "AND tipo_ficha LIKE ? "
                    + "AND potencia_kw >= ? "
                    + "ORDER BY cidade, codigo";
@@ -208,10 +176,7 @@ public class ServicoGeral {
         return postos;
     }
 
-    // =====================================================
-    // CONSULTA DE ESTADO ATUAL (operacional + administrativo)
-    // Devolve o Posto, que tem os dois estados.
-    // =====================================================
+    // estado atual de um posto (o Posto tem os dois estados)
     public Posto consultarEstado(int postoId) throws ErroValidacao, SQLException {
 
         String sql = "SELECT * FROM posto WHERE id = ?";
@@ -229,12 +194,10 @@ public class ServicoGeral {
         }
     }
 
-    // =====================================================
-    // CONSULTA DE HISTORICO de um posto (do mais antigo para o mais recente)
-    // =====================================================
+    // historico de um posto
     public List<EntradaHistorico> consultarHistorico(int postoId) throws ErroValidacao, SQLException {
 
-        // Primeiro confirma que o posto existe (senao lanca ErroValidacao)
+        // para dar erro se o posto nao existir
         consultarEstado(postoId);
 
         String sql = "SELECT * FROM historico WHERE posto_id = ? ORDER BY data_hora, id";
@@ -251,7 +214,7 @@ public class ServicoGeral {
                 historico.add(new EntradaHistorico(
                         rs.getInt("id"),
                         rs.getInt("posto_id"),
-                        (Integer) rs.getObject("reserva_id"),   // pode vir null
+                        (Integer) rs.getObject("reserva_id"),
                         rs.getString("tipo"),
                         rs.getString("estado_anterior"),
                         rs.getString("estado_novo"),
@@ -262,14 +225,11 @@ public class ServicoGeral {
         return historico;
     }
 
-    // =====================================================
-    // OPERACAO PRINCIPAL: CRIAR RESERVA
-    // As datas chegam como texto "yyyy-MM-dd HH:mm" e sao validadas aqui no servidor.
-    // =====================================================
+    // operacao principal: criar uma reserva
     public Reserva criarReserva(int utilizadorId, int postoId, String textoInicio, String textoFim)
             throws ErroValidacao, SQLException {
 
-        // ---------- 1. Validar as datas (nao precisa da BD) ----------
+        // 1. datas
         LocalDateTime inicio = lerData(textoInicio);
         LocalDateTime fim    = lerData(textoFim);
         validarPeriodo(inicio, fim);
@@ -277,13 +237,11 @@ public class ServicoGeral {
         Connection con = null;
         try {
             con = bd.ligar();
-            con.setAutoCommit(false);   // inicio da TRANSACAO
+            con.setAutoCommit(false);
 
-            // ---------- 2. Bloquear o utilizador e o posto (CONCORRENCIA) ----------
-            // "FOR UPDATE" bloqueia a linha ate ao commit/rollback.
-            // Se outro cliente tentar reservar o mesmo posto ao mesmo tempo,
-            // fica a ESPERAR aqui ate esta transacao acabar.
-            // Bloqueamos sempre pela mesma ordem (utilizador, depois posto) para evitar deadlocks.
+            // 2. bloquear utilizador e posto com FOR UPDATE
+            // se outro pedido quiser o mesmo posto fica a espera ate ao commit/rollback
+            // (sempre pela mesma ordem para nao haver deadlock)
 
             PreparedStatement psUtil = con.prepareStatement(
                     "SELECT tipo_ficha FROM utilizador WHERE id = ? FOR UPDATE");
@@ -303,7 +261,7 @@ public class ServicoGeral {
             }
             Posto posto = lerPosto(rsPosto);
 
-            // ---------- 3. Regras de negocio (com o estado ATUAL da BD) ----------
+            // 3. regras de negocio
             if (posto.getEstadoAdmin() != EstadoAdmin.APROVADO) {
                 throw new ErroValidacao("O posto " + posto.getCodigo() + " nao esta aprovado.");
             }
@@ -316,7 +274,7 @@ public class ServicoGeral {
                                         + " e o posto e " + posto.getTipoFicha() + ".");
             }
 
-            // Maximo de reservas ativas (futuras) por utilizador
+            // maximo de reservas ativas
             PreparedStatement psConta = con.prepareStatement(
                     "SELECT COUNT(*) FROM reserva "
                   + "WHERE utilizador_id = ? AND estado = 'ATIVA' AND data_fim > NOW()");
@@ -328,8 +286,7 @@ public class ServicoGeral {
                                         + " reservas ativas (maximo permitido).");
             }
 
-            // Sobreposicao: existe outra reserva ATIVA neste posto que se cruze com [inicio, fim]?
-            // Dois periodos cruzam-se se: inicio_existente < fim_novo  E  fim_existente > inicio_novo
+            // sobreposicao: inicio_existente < fim_novo e fim_existente > inicio_novo
             PreparedStatement psSobre = con.prepareStatement(
                     "SELECT COUNT(*) FROM reserva "
                   + "WHERE posto_id = ? AND estado = 'ATIVA' AND data_inicio < ? AND data_fim > ?");
@@ -343,7 +300,7 @@ public class ServicoGeral {
                                         + " ja tem uma reserva nesse periodo.");
             }
 
-            // ---------- 4. Tudo valido: gravar a reserva ----------
+            // 4. gravar
             PreparedStatement psInsert = con.prepareStatement(
                     "INSERT INTO reserva (utilizador_id, posto_id, data_inicio, data_fim, estado) "
                   + "VALUES (?, ?, ?, ?, 'ATIVA') RETURNING id, criada_em");
@@ -356,7 +313,7 @@ public class ServicoGeral {
             int reservaId = rsInsert.getInt("id");
             LocalDateTime criadaEm = rsInsert.getTimestamp("criada_em").toLocalDateTime();
 
-            // ---------- 5. Mudar o estado do posto (DISPONIVEL -> RESERVADO) ----------
+            // 5. DISPONIVEL -> RESERVADO
             EstadoPosto estadoAntes = posto.getEstado();
             if (estadoAntes.sistemaPodeMudarPara(EstadoPosto.RESERVADO)) {
                 PreparedStatement psEstado = con.prepareStatement(
@@ -365,18 +322,17 @@ public class ServicoGeral {
                 psEstado.executeUpdate();
             }
 
-            // ---------- 6. Historico ----------
+            // 6. historico
             Historico.registar(con, postoId, reservaId, "RESERVA_CRIADA",
                     estadoAntes.name(), EstadoPosto.RESERVADO.name(),
                     "Reserva #" + reservaId + " criada pelo utilizador #" + utilizadorId);
 
-            con.commit();   // grava tudo e liberta os bloqueios
+            con.commit();
 
             return new Reserva(reservaId, utilizadorId, postoId, inicio, fim,
                                EstadoReserva.ATIVA, criadaEm);
 
-        } catch (ErroValidacao | SQLException e) {
-            // Qualquer erro: desfaz tudo e liberta os bloqueios
+        } catch (Exception e) {
             if (con != null) {
                 con.rollback();
             }
@@ -389,18 +345,14 @@ public class ServicoGeral {
         }
     }
 
-    // =====================================================
-    // FUNCIONALIDADE PROPRIA 1: CANCELAR RESERVA
-    // So o dono pode cancelar, e so antes de a reserva comecar.
-    // =====================================================
+    // funcionalidade propria: cancelar reserva (so o dono e antes de comecar)
     public void cancelarReserva(int reservaId, int utilizadorId) throws ErroValidacao, SQLException {
 
         Connection con = null;
         try {
             con = bd.ligar();
-            con.setAutoCommit(false);   // inicio da TRANSACAO
+            con.setAutoCommit(false);
 
-            // 1. Ler a reserva
             PreparedStatement psRes = con.prepareStatement(
                     "SELECT * FROM reserva WHERE id = ?");
             psRes.setInt(1, reservaId);
@@ -410,7 +362,7 @@ public class ServicoGeral {
             }
             int postoId = rsRes.getInt("posto_id");
 
-            // 2. Bloquear o posto (mesmo mecanismo do criarReserva)
+            // bloquear o posto (como no criarReserva)
             PreparedStatement psPosto = con.prepareStatement(
                     "SELECT * FROM posto WHERE id = ? FOR UPDATE");
             psPosto.setInt(1, postoId);
@@ -418,7 +370,6 @@ public class ServicoGeral {
             rsPosto.next();
             Posto posto = lerPosto(rsPosto);
 
-            // 3. Validacoes
             if (rsRes.getInt("utilizador_id") != utilizadorId) {
                 throw new ErroValidacao("A reserva #" + reservaId + " nao pertence ao utilizador #"
                                         + utilizadorId + ".");
@@ -432,13 +383,12 @@ public class ServicoGeral {
                 throw new ErroValidacao("A reserva #" + reservaId + " ja comecou e nao pode ser cancelada.");
             }
 
-            // 4. Cancelar
             PreparedStatement psCancelar = con.prepareStatement(
                     "UPDATE reserva SET estado = 'CANCELADA' WHERE id = ?");
             psCancelar.setInt(1, reservaId);
             psCancelar.executeUpdate();
 
-            // 5. Se o posto ficou sem reservas ativas, volta a DISPONIVEL
+            // se ficou sem reservas volta a DISPONIVEL
             EstadoPosto estadoAntes = posto.getEstado();
             EstadoPosto estadoDepois = estadoAntes;
 
@@ -451,14 +401,13 @@ public class ServicoGeral {
                 estadoDepois = EstadoPosto.DISPONIVEL;
             }
 
-            // 6. Historico
             Historico.registar(con, postoId, reservaId, "RESERVA_CANCELADA",
                     estadoAntes.name(), estadoDepois.name(),
                     "Reserva #" + reservaId + " cancelada pelo utilizador #" + utilizadorId);
 
             con.commit();
 
-        } catch (ErroValidacao | SQLException e) {
+        } catch (Exception e) {
             if (con != null) {
                 con.rollback();
             }
@@ -471,13 +420,9 @@ public class ServicoGeral {
         }
     }
 
-    // =====================================================
-    // FUNCIONALIDADE PROPRIA 2: AS MINHAS RESERVAS (com custo estimado)
-    // custo = horas x potencia (kW) x preco (EUR/kWh)
-    // =====================================================
+    // funcionalidade propria: reservas de um utilizador com custo estimado
     public List<Reserva> minhasReservas(int utilizadorId) throws ErroValidacao, SQLException {
 
-        // JOIN com a tabela posto para ir buscar o codigo, a potencia e o preco
         String sql = "SELECT r.*, p.codigo, p.potencia_kw, p.preco_kwh "
                    + "FROM reserva r JOIN posto p ON r.posto_id = p.id "
                    + "WHERE r.utilizador_id = ? "
@@ -488,7 +433,6 @@ public class ServicoGeral {
         try (Connection con = bd.ligar();
              PreparedStatement ps = con.prepareStatement(sql)) {
 
-            // Confirmar que o utilizador existe
             PreparedStatement psUtil = con.prepareStatement("SELECT id FROM utilizador WHERE id = ?");
             psUtil.setInt(1, utilizadorId);
             if (!psUtil.executeQuery().next()) {
@@ -512,10 +456,7 @@ public class ServicoGeral {
         return reservas;
     }
 
-    // =====================================================
-    // FUNCIONALIDADE PROPRIA 3: PROCURAR POSTOS LIVRES num periodo,
-    // compativeis com a ficha do carro do utilizador.
-    // =====================================================
+    // funcionalidade propria: postos livres num periodo, com a ficha do carro
     public List<Posto> procurarPostosLivres(int utilizadorId, String textoInicio, String textoFim)
             throws ErroValidacao, SQLException {
 
@@ -523,8 +464,6 @@ public class ServicoGeral {
         LocalDateTime fim    = lerData(textoFim);
         validarPeriodo(inicio, fim);
 
-        // Postos aprovados, que aceitam reservas, com a ficha certa,
-        // e que NAO tem nenhuma reserva ativa a cruzar-se com o periodo pedido.
         String sql = "SELECT * FROM posto p "
                    + "WHERE p.estado_admin = 'APROVADO' "
                    + "AND p.estado IN ('DISPONIVEL', 'RESERVADO') "
@@ -540,7 +479,6 @@ public class ServicoGeral {
 
         try (Connection con = bd.ligar()) {
 
-            // Ficha do carro do utilizador
             PreparedStatement psUtil = con.prepareStatement("SELECT tipo_ficha FROM utilizador WHERE id = ?");
             psUtil.setInt(1, utilizadorId);
             ResultSet rsUtil = psUtil.executeQuery();
@@ -562,9 +500,30 @@ public class ServicoGeral {
         return postos;
     }
 
-    // =====================================================
-    // AUXILIAR: valida um periodo de reserva (usado por criarReserva e procurarPostosLivres)
-    // =====================================================
+    // tambem usado pelo ServicoAdmin ao editar
+    public static void validarDadosPosto(String codigo, String localizacao, String cidade,
+                                         double potenciaKw, TipoFicha tipoFicha, double precoKwh)
+            throws ErroValidacao {
+        if (codigo == null || codigo.trim().isEmpty()) {
+            throw new ErroValidacao("O codigo e obrigatorio.");
+        }
+        if (localizacao == null || localizacao.trim().isEmpty()) {
+            throw new ErroValidacao("A localizacao e obrigatoria.");
+        }
+        if (cidade == null || cidade.trim().isEmpty()) {
+            throw new ErroValidacao("A cidade e obrigatoria.");
+        }
+        if (potenciaKw <= 0) {
+            throw new ErroValidacao("A potencia tem de ser maior que 0.");
+        }
+        if (tipoFicha == null) {
+            throw new ErroValidacao("O tipo de ficha e obrigatorio.");
+        }
+        if (precoKwh < 0) {
+            throw new ErroValidacao("O preco nao pode ser negativo.");
+        }
+    }
+
     private void validarPeriodo(LocalDateTime inicio, LocalDateTime fim) throws ErroValidacao {
         if (!fim.isAfter(inicio)) {
             throw new ErroValidacao("A data de fim tem de ser depois da data de inicio.");
@@ -577,9 +536,6 @@ public class ServicoGeral {
         }
     }
 
-    // =====================================================
-    // AUXILIAR: quantas reservas ATIVAS (ainda nao terminadas) tem um posto
-    // =====================================================
     private int contarReservasAtivas(Connection con, int postoId) throws SQLException {
         PreparedStatement ps = con.prepareStatement(
                 "SELECT COUNT(*) FROM reserva "
@@ -590,9 +546,6 @@ public class ServicoGeral {
         return rs.getInt(1);
     }
 
-    // =====================================================
-    // AUXILIAR: converte a linha atual do ResultSet num objeto Reserva
-    // =====================================================
     public static Reserva lerReserva(ResultSet rs) throws SQLException {
         return new Reserva(
                 rs.getInt("id"),
@@ -604,9 +557,6 @@ public class ServicoGeral {
                 rs.getTimestamp("criada_em").toLocalDateTime());
     }
 
-    // =====================================================
-    // AUXILIAR: converte "yyyy-MM-dd HH:mm" em LocalDateTime
-    // =====================================================
     private LocalDateTime lerData(String texto) throws ErroValidacao {
         if (texto == null) {
             throw new ErroValidacao("Data em falta.");
@@ -618,10 +568,7 @@ public class ServicoGeral {
         }
     }
 
-    // =====================================================
-    // AUXILIAR: converte a linha atual do ResultSet num objeto Posto.
-    // (static para o ServicoAdmin tambem poder usar: ServicoGeral.lerPosto(rs))
-    // =====================================================
+    // linha do ResultSet -> Posto (tambem usado no ServicoAdmin)
     public static Posto lerPosto(ResultSet rs) throws SQLException {
         return new Posto(
                 rs.getInt("id"),

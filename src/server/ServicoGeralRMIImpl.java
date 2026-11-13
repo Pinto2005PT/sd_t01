@@ -13,16 +13,7 @@ import java.rmi.server.UnicastRemoteObject;
 import java.sql.SQLException;
 import java.util.List;
 
-/**
- * Implementacao RMI do servico do cliente geral.
- *
- * Nao tem logica nenhuma: recebe a chamada remota e passa-a ao ServicoGeral.
- * A unica coisa que faz e converter erros da base de dados (SQLException)
- * numa mensagem clara para o cliente.
- *
- * Nota: o RMI atende cada chamada numa thread propria, por isso varios
- * clientes podem ser servidos ao mesmo tempo.
- */
+// Implementacao RMI do servico do cliente geral.
 public class ServicoGeralRMIImpl extends UnicastRemoteObject implements ServicoGeralRMI {
 
     private static final long serialVersionUID = 1L;
@@ -30,7 +21,7 @@ public class ServicoGeralRMIImpl extends UnicastRemoteObject implements ServicoG
     private final ServicoGeral servico;
 
     public ServicoGeralRMIImpl(ServicoGeral servico) throws RemoteException {
-        super();   // "exporta" o objeto: passa a poder receber chamadas pela rede
+        super();
         this.servico = servico;
     }
 
@@ -121,16 +112,9 @@ public class ServicoGeralRMIImpl extends UnicastRemoteObject implements ServicoG
         }
     }
 
-    /**
-     * Converte um erro da BD numa mensagem clara.
-     * Os codigos SQLState que comecam por "08" sao erros de LIGACAO (BD em baixo).
-     */
+    // erro da BD -> mensagem para o cliente
     private ErroValidacao erroBD(SQLException e) {
         System.out.println("[Servidor] Erro na BD: " + e.getMessage());
-
-        if (e.getSQLState() != null && e.getSQLState().startsWith("08")) {
-            return new ErroValidacao("A base de dados esta indisponivel. Tente mais tarde.");
-        }
-        return new ErroValidacao("Erro na base de dados: " + e.getMessage());
+        return new ErroValidacao("Erro na base de dados (pode estar indisponivel). Tente mais tarde.");
     }
 }

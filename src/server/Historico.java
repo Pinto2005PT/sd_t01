@@ -5,13 +5,7 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 
-/**
- * Escreve uma linha na tabela historico.
- * Usado pelo ServicoGeral e pelo ServicoAdmin.
- *
- * Recebe a Connection de quem chama, para a escrita no historico
- * ficar DENTRO da mesma transacao da operacao (ou grava tudo, ou nada).
- */
+// Escreve uma linha na tabela historico.
 public class Historico {
 
     public static void registar(Connection con, int postoId, Integer reservaId, String tipo,
@@ -24,7 +18,7 @@ public class Historico {
         try (PreparedStatement ps = con.prepareStatement(sql)) {
             ps.setInt(1, postoId);
 
-            // reserva_id pode ser null (ex.: registo ou aprovacao de um posto)
+            // reserva_id pode ser null
             if (reservaId == null) {
                 ps.setNull(2, Types.INTEGER);
             } else {

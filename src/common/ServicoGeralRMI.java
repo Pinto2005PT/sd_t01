@@ -4,18 +4,9 @@ import java.rmi.Remote;
 import java.rmi.RemoteException;
 import java.util.List;
 
-/**
- * Interface REMOTA do cliente geral (RMI).
- * E o "contrato": a lista de metodos que o cliente geral pode chamar no servidor.
- *
- * Regras do RMI:
- *  - a interface tem de estender Remote;
- *  - todos os metodos tem de declarar RemoteException (erros de rede);
- *  - os parametros e os resultados tem de ser Serializable (ou tipos simples).
- */
+// Interface remota (RMI) usada pelo cliente geral
 public interface ServicoGeralRMI extends Remote {
 
-    // --- 6 funcionalidades obrigatorias ---
     Utilizador registarUtilizador(String nome, String email, String matricula, TipoFicha tipoFicha)
             throws RemoteException, ErroValidacao;
 
@@ -35,7 +26,7 @@ public interface ServicoGeralRMI extends Remote {
     List<EntradaHistorico> consultarHistorico(int postoId)
             throws RemoteException, ErroValidacao;
 
-    // --- 3 funcionalidades proprias ---
+    // funcionalidades proprias
     void cancelarReserva(int reservaId, int utilizadorId)
             throws RemoteException, ErroValidacao;
 

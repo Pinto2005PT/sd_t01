@@ -9,18 +9,13 @@ import common.ServicoGeralRMI;
 import common.TipoFicha;
 import common.Utilizador;
 
+import java.rmi.Naming;
 import java.rmi.RemoteException;
-import java.rmi.registry.LocateRegistry;
-import java.rmi.registry.Registry;
 import java.util.List;
 import java.util.Properties;
 import java.util.Scanner;
 
-/**
- * Cliente geral (condutores). Comunica com o servidor por RMI.
- *
- * Uso: java client.ClienteGeral config.properties
- */
+// Cliente geral (condutores). Comunica com o servidor por RMI.
 public class ClienteGeral {
 
     private static Scanner teclado = new Scanner(System.in);
@@ -29,13 +24,12 @@ public class ClienteGeral {
     private static int porta;
     private static String nome;
 
-    // Referencia remota para o servidor (null = nao estamos ligados)
+    // null = nao esta ligado
     private static ServicoGeralRMI servico = null;
 
     public static void main(String[] args) {
         String ficheiro = (args.length > 0) ? args[0] : "config.properties";
 
-        // 1. Ler a configuracao
         try {
             Properties config = Config.carregar(ficheiro);
             host  = config.getProperty("rmi.host");
@@ -46,10 +40,8 @@ public class ClienteGeral {
             return;
         }
 
-        // 2. Ligar ao servidor (se falhar, tenta outra vez quando o utilizador escolher uma opcao)
         ligar();
 
-        // 3. Menu
         int opcao = -1;
         while (opcao != 0) {
             mostrarMenu();
@@ -59,7 +51,7 @@ public class ClienteGeral {
                 break;
             }
 
-            // Se nao estamos ligados, tenta ligar antes de executar a opcao
+            // se o servidor tinha caido tenta ligar outra vez
             if (servico == null && !ligar()) {
                 continue;
             }
@@ -68,26 +60,21 @@ public class ClienteGeral {
                 executar(opcao);
 
             } catch (ErroValidacao e) {
-                // Pedido rejeitado pelo servidor (regra de negocio, dados invalidos, BD em baixo)
                 System.out.println("\n>> Pedido rejeitado: " + e.getMessage());
 
             } catch (RemoteException e) {
-                // Falha de comunicacao: o servidor foi abaixo
+                // o servidor foi abaixo
                 System.out.println("\n>> Servidor indisponivel. Volte a tentar mais tarde.");
-                servico = null;   // na proxima opcao tenta voltar a ligar
+                servico = null;
             }
         }
 
         System.out.println("Adeus!");
     }
 
-    // =====================================================
-    // LIGACAO AO SERVIDOR
-    // =====================================================
     private static boolean ligar() {
         try {
-            Registry registo = LocateRegistry.getRegistry(host, porta);
-            servico = (ServicoGeralRMI) registo.lookup(nome);
+            servico = (ServicoGeralRMI) Naming.lookup("//" + host + ":" + porta + "/" + nome);
             System.out.println("Ligado ao servidor (" + host + ":" + porta + ").");
             return true;
         } catch (Exception e) {
@@ -98,9 +85,6 @@ public class ClienteGeral {
         }
     }
 
-    // =====================================================
-    // MENU
-    // =====================================================
     private static void mostrarMenu() {
         System.out.println();
         System.out.println("===== RESERVA DE POSTOS DE CARREGAMENTO =====");
@@ -131,9 +115,6 @@ public class ClienteGeral {
         }
     }
 
-    // =====================================================
-    // OPCOES (cada uma le os dados e chama o metodo remoto)
-    // =====================================================
     private static void registarUtilizador() throws ErroValidacao, RemoteException {
         System.out.println("\n--- Registar utilizador ---");
         String nomeUtil   = lerTexto("Nome: ");
@@ -248,9 +229,7 @@ public class ClienteGeral {
         }
     }
 
-    // =====================================================
-    // LEITURA DO TECLADO (repete ate o valor ser valido)
-    // =====================================================
+    // leitura do teclado
     private static String lerTexto(String pergunta) {
         System.out.print(pergunta);
         return teclado.nextLine().trim();
@@ -278,12 +257,12 @@ public class ClienteGeral {
         }
     }
 
-    /** Aceita "0.35" e "0,35". */
+    // aceita 0.35 e 0,35
     private static double converterDecimal(String texto) {
         return Double.parseDouble(texto.replace(',', '.'));
     }
 
-    /** Le um tipo de ficha. Se 'opcional' for true, Enter devolve null (= sem filtro). */
+    // se opcional, Enter devolve null (sem filtro)
     private static TipoFicha lerFicha(String pergunta, boolean opcional) {
         while (true) {
             String texto = lerTexto(pergunta + " (TIPO2 / CCS / CHADEMO): ").toUpperCase();

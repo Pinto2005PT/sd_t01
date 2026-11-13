@@ -2,7 +2,7 @@ package common;
 
 import java.io.Serializable;
 
-/** Um posto de carregamento (o elemento gerido; tabela posto). */
+// Um posto de carregamento (o elemento gerido; tabela posto).
 public class Posto implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -17,14 +17,13 @@ public class Posto implements Serializable {
     private EstadoPosto estado;
     private EstadoAdmin estadoAdmin;
 
-    /** Construtor para um posto NOVO: comeca DISPONIVEL e PENDENTE. */
+    // posto novo: comeca DISPONIVEL e PENDENTE
     public Posto(String codigo, String localizacao, String cidade,
                  double potenciaKw, TipoFicha tipoFicha, double precoKwh) {
         this(0, codigo, localizacao, cidade, potenciaKw, tipoFicha, precoKwh,
              EstadoPosto.DISPONIVEL, EstadoAdmin.PENDENTE);
     }
 
-    /** Construtor completo (usado quando se le da BD). */
     public Posto(int id, String codigo, String localizacao, String cidade,
                  double potenciaKw, TipoFicha tipoFicha, double precoKwh,
                  EstadoPosto estado, EstadoAdmin estadoAdmin) {
@@ -39,7 +38,6 @@ public class Posto implements Serializable {
         this.estadoAdmin = estadoAdmin;
     }
 
-    // --- getters ---
     public int getId()                 { return id; }
     public String getCodigo()          { return codigo; }
     public String getLocalizacao()     { return localizacao; }
@@ -50,7 +48,7 @@ public class Posto implements Serializable {
     public EstadoPosto getEstado()     { return estado; }
     public EstadoAdmin getEstadoAdmin(){ return estadoAdmin; }
 
-    // --- setters (so para os atributos que o admin pode editar) ---
+    // setters so dos atributos que o admin pode editar
     public void setCodigo(String codigo)           { this.codigo = codigo; }
     public void setLocalizacao(String localizacao) { this.localizacao = localizacao; }
     public void setCidade(String cidade)           { this.cidade = cidade; }

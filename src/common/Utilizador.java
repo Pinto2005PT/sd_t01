@@ -2,7 +2,7 @@ package common;
 
 import java.io.Serializable;
 
-/** Um condutor registado no sistema (tabela utilizador). */
+// Um condutor registado no sistema (tabela utilizador).
 public class Utilizador implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -13,12 +13,11 @@ public class Utilizador implements Serializable {
     private String matricula;
     private TipoFicha tipoFicha;
 
-    /** Construtor para um utilizador NOVO (ainda sem id, a BD e que o gera). */
+    // utilizador novo (o id e gerado pela BD)
     public Utilizador(String nome, String email, String matricula, TipoFicha tipoFicha) {
         this(0, nome, email, matricula, tipoFicha);
     }
 
-    /** Construtor completo (usado quando se le da BD). */
     public Utilizador(int id, String nome, String email, String matricula, TipoFicha tipoFicha) {
         this.id = id;
         this.nome = nome;

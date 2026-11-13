@@ -4,7 +4,7 @@ import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 
-/** Uma reserva de carregamento (a operacao principal; tabela reserva). */
+// Uma reserva de carregamento (a operacao principal; tabela reserva).
 public class Reserva implements Serializable {
 
     private static final long serialVersionUID = 1L;
@@ -17,11 +17,10 @@ public class Reserva implements Serializable {
     private EstadoReserva estado;
     private LocalDateTime criadaEm;
 
-    // Campos extra, so preenchidos na funcionalidade "as minhas reservas"
-    private String codigoPosto;      // ex.: "EVR-001"
-    private double custoEstimado;    // em euros
+    // so usados nas "minhas reservas"
+    private String codigoPosto;
+    private double custoEstimado;
 
-    /** Construtor completo (usado quando se le da BD). */
     public Reserva(int id, int utilizadorId, int postoId,
                    LocalDateTime dataInicio, LocalDateTime dataFim,
                    EstadoReserva estado, LocalDateTime criadaEm) {
@@ -53,7 +52,6 @@ public class Reserva implements Serializable {
         String texto = String.format("Reserva #%d | utilizador %d | posto %d | %s -> %s | %s",
                 id, utilizadorId, postoId, dataInicio.format(formato), dataFim.format(formato), estado);
 
-        // Se tiver os campos extra, mostra-os tambem
         if (codigoPosto != null) {
             texto += String.format(" | %s | custo estimado: %.2f EUR", codigoPosto, custoEstimado);
         }
